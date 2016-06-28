@@ -3,7 +3,6 @@ package com.tugo.yarnapp;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -26,7 +25,6 @@ import org.apache.hadoop.yarn.api.records.LocalResourceType;
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
-import org.apache.hadoop.yarn.api.records.URL;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
 import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.client.api.YarnClientApplication;
@@ -34,8 +32,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
-
-import static org.apache.hadoop.yarn.webapp.hamlet.HamletSpec.InputType.file;
 
 public class AppLauncher
 {
@@ -48,6 +44,7 @@ public class AppLauncher
   public String javaCmd = "${JAVA_HOME}" + "/bin/java";
   private String applicationType = "TusharApp";
   private Configuration conf;
+  private Integer amMemory = 1024;
 
   public AppLauncher() {
     conf = new Configuration();
@@ -83,6 +80,7 @@ public class AppLauncher
     LOG.info("Setting up application submission context for ASM");
     ApplicationSubmissionContext appContext = newApp.getApplicationSubmissionContext();
     appId = appContext.getApplicationId();
+    appContext.setApplicationType("YarnTestApp");
     appContext.setApplicationName(appName);
     appContext.setApplicationType(this.applicationType);
 
@@ -92,17 +90,6 @@ public class AppLauncher
 
     Map<String, String> env = new HashMap<>();
     env.put("HADOOP_USER_NAME", UserGroupInformation.getLoginUser().getUserName());
-
-    /*
-    final String CLASS_PATH_SEPARATOR= "<CPS>";
-    StringBuilder classPathEnv = new StringBuilder(ApplicationConstants.Environment.CLASSPATH.$$())
-      .append(CLASS_PATH_SEPARATOR).append("./*");
-    String c = conf.get(YarnConfiguration.YARN_APPLICATION_CLASSPATH);
-    classPathEnv.append(c.trim());
-    classPathEnv.append(CLASS_PATH_SEPARATOR).append(
-      "./log4j.properties");
-    env.put("CLASSPATH", classPathEnv.toString());
-    */
 
     StringBuilder classPathEnv = new StringBuilder("./*");
     String classpath = conf.get(YarnConfiguration.YARN_APPLICATION_CLASSPATH);
@@ -120,7 +107,14 @@ public class AppLauncher
 
     // setup the command to run
     ArrayList<CharSequence> vargs = new ArrayList<>(30);
-    vargs.add("/tmp/mymaster.sh");
+    vargs.add("/bin/bash appmaster.sh");
+    LOG.info("Setting up app master command");
+    vargs.add("${JAVA_HOME}/bin/java");
+    // Set Xmx based on am memory size
+    vargs.add("-Xmx" + amMemory + "m");
+    // Set class name
+    String appMasterMainClass = "com.tugo.yarnapp.AppMaster";
+    vargs.add(appMasterMainClass);
     vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/AppMaster.stdout");
     vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/AppMaster.stderr");
 
@@ -167,9 +161,9 @@ public class AppLauncher
   Map<String, LocalResource> getLocalResources() throws IOException
   {
     Map<String, LocalResource> localResources = new HashMap<>();
-    Path path = new Path("file:///tmp/tushar/appfiles/");
+    Path path = new Path("file:///tmp/appfiles/");
     FileSystem localfs = FileSystem.newInstance(path.toUri(), new Configuration());
-    FileSystem remotefs = FileSystem.newInstance(new Path("hdfs://localhost:9000/user/").toUri(), new Configuration());
+    FileSystem remotefs = FileSystem.newInstance(new Path("hdfs:///user/").toUri(), new Configuration());
     System.out.println("Home directory " + remotefs.getHomeDirectory());
     FileStatus[] files = localfs.listStatus(path);
     for (FileStatus fileStatus : files) {
