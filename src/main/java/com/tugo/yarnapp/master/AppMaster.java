@@ -215,7 +215,15 @@ public class AppMaster
     localResources = resources.getLocalResouces();
 
     // setup command
-    String command = "/bin/bash client.sh";
+    ArrayList<CharSequence> vargs = new ArrayList<>();
+    vargs.add("/bin/bash client.sh");
+    vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout");
+    vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr");
+
+    StringBuilder command = new StringBuilder(9 * vargs.size());
+    for (CharSequence str : vargs) {
+      command.append(str).append(" ");
+    }
     List<String> commands = new ArrayList<String>();
     commands.add(command.toString());
 
