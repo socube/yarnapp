@@ -11,9 +11,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse;
@@ -21,8 +18,6 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.LocalResource;
-import org.apache.hadoop.yarn.api.records.LocalResourceType;
-import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
@@ -30,7 +25,6 @@ import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.client.api.YarnClientApplication;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
-import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
 
 public class AppLauncher
@@ -85,9 +79,13 @@ public class AppLauncher
     appContext.setApplicationType(this.applicationType);
 
     ContainerLaunchContext amContainer = Records.newRecord(ContainerLaunchContext.class);
-    Map<String, LocalResource> localResources = getLocalResources();
+    AppResources resouces = new AppResources(appName + "/" + appId);
+    resouces.addLocalResources("file:///tmp/appfiles");
+    Map<String, LocalResource> localResources = resouces.getLocalResouces();
     amContainer.setLocalResources(localResources);
-
+    for(Map.Entry<String, LocalResource> entry : localResources.entrySet()) {
+      System.out.println("Resource key " + entry.getKey() + " value " + entry.getValue());
+    }
     Map<String, String> env = new HashMap<>();
     env.put("HADOOP_USER_NAME", UserGroupInformation.getLoginUser().getUserName());
 
@@ -142,35 +140,6 @@ public class AppLauncher
     // Set the queue to which this application is to be submitted in the RM
     //appContext.setQueue("default");
     yarnClient.submitApplication(appContext);
-  }
-
-  void addToLocalResource(FileSystem fs, Path fileSrcPath, String fileDestPath,
-    String appId, Map<String, LocalResource> localResources) throws IOException
-  {
-    String suffix = appName + "/" + appId + "/" + fileDestPath;
-    Path dst = new Path(fs.getHomeDirectory(), suffix);
-    System.out.println("src " + fileSrcPath  + " dest " + dst);
-    fs.copyFromLocalFile(fileSrcPath, dst);
-    FileStatus fileStatus = fs.getFileStatus(dst);
-    LocalResource lr = LocalResource.newInstance(ConverterUtils.getYarnUrlFromPath(fileStatus.getPath()),
-      LocalResourceType.FILE, LocalResourceVisibility.APPLICATION, fileStatus.getLen(),
-      fileStatus.getModificationTime());
-    localResources.put(fileDestPath, lr);
-  }
-
-  Map<String, LocalResource> getLocalResources() throws IOException
-  {
-    Map<String, LocalResource> localResources = new HashMap<>();
-    Path path = new Path("file:///tmp/appfiles/");
-    FileSystem localfs = FileSystem.newInstance(path.toUri(), new Configuration());
-    FileSystem remotefs = FileSystem.newInstance(new Path("hdfs:///user/").toUri(), new Configuration());
-    System.out.println("Home directory " + remotefs.getHomeDirectory());
-    FileStatus[] files = localfs.listStatus(path);
-    for (FileStatus fileStatus : files) {
-      System.out.println("name " + fileStatus.getPath().getName());
-      addToLocalResource(remotefs, fileStatus.getPath(), fileStatus.getPath().getName(), appId.toString(), localResources);
-    }
-    return localResources;
   }
 
   public static void main(String[] args) throws IOException, YarnException
